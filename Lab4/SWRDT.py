@@ -53,18 +53,14 @@ class Segment:
         # extract the fields
         length_S = byte_S[0 : Segment.length_S_length]
         seq_num_S = byte_S[
-            Segment.length_S_length : Segment.seq_num_S_length + Segment.seq_num_S_length
+            Segment.length_S_length : Segment.length_S_length + Segment.seq_num_S_length
         ]
         checksum_S = byte_S[
-            Segment.seq_num_S_length
-            + Segment.seq_num_S_length : Segment.seq_num_S_length
-            + Segment.length_S_length
-            + Segment.checksum_length
+            Segment.length_S_length + Segment.seq_num_S_length : Segment.length_S_length + Segment.seq_num_S_length + Segment.checksum_length
         ]
         msg_S = byte_S[
-            Segment.seq_num_S_length + Segment.seq_num_S_length + Segment.checksum_length :
+            Segment.length_S_length + Segment.seq_num_S_length + Segment.checksum_length :
         ]
-
         # compute the checksum locally
         checksum = hashlib.md5(str(length_S + seq_num_S + msg_S).encode("utf-8"))
         computed_checksum_S = checksum.hexdigest()
@@ -97,7 +93,6 @@ class SWRDT:
                 if ack:
                     try:
                         ack_segment = Segment.from_byte_S(ack)
-                        print(f"Parsed ACK: seq_num={ack_segment.seq_num}, msg_S={ack_segment.msg_S}")  # Debug print
                         if ack_segment.msg_S == "ACK" and ack_segment.seq_num == self.seq_num:
                             print(f"Receive ACK {ack_segment.seq_num}. Message successfully sent!")
                             ack_received = True

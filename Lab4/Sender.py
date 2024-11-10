@@ -30,26 +30,6 @@ if __name__ == "__main__":
     for i, msg_S in enumerate(msg_L):
         print("Sent Message: " + msg_S)
         swrdt.swrdt_send(msg_S)
-
-        # Wait for ACK
-        ack_received = False
-        while not ack_received:
-            ack = swrdt.network.network_receive()
-            if ack:
-                try:
-                    ack_segment = SWRDT.Segment.from_byte_S(ack)
-                    if ack_segment.msg_S == "ACK" and ack_segment.seq_num == swrdt.seq_num - 1:
-                        print(f"Receive ACK {ack_segment.seq_num}. Proceed to next message.")
-                        ack_received = True
-                except RuntimeError:
-                    print(f"Corruption detected in ACK. Resend message {swrdt.seq_num - 1}")
-            if time_of_last_data + timeout < time.time():
-                print(f"Timeout! Resend message {swrdt.seq_num - 1}")
-                swrdt.swrdt_send(msg_S)
-                time_of_last_data = time.time()
-
-        # Stop after the last message
-        if i == len(msg_L) - 1:
-            break
+        time_of_last_data = time.time()
 
     swrdt.disconnect()

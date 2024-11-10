@@ -25,7 +25,6 @@ if __name__ == "__main__":
         time_of_last_data = time.time()
 
         # process the message (convert to uppercase)
-        print(f"Received raw message: {msg_S}")  # Debug print
         try:
             identifier, msg_content = msg_S.split(":", 1)
         except ValueError:

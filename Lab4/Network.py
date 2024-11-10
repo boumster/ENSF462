@@ -57,21 +57,25 @@ class NetworkLayer:
     def network_send(self, msg_S):
         # return without sending if the packet is being dropped
         if random.random() < self.prob_pkt_loss:
+            print("Packet loss simulated.")
             return
         # corrupt a packet
         if random.random() < self.prob_byte_corr:
-            start = random.randint(SWRDT.Packet.length_S_length, len(msg_S) - 5)
+            start = random.randint(SWRDT.Segment.length_S_length, len(msg_S) - 5)
             num = random.randint(1, 5)
             repl_S = "".join(random.sample("XXXXX", num))  # sample length >= num
             msg_S = msg_S[:start] + repl_S + msg_S[start + num :]
+            print("Packet corruption simulated.")
         # reorder packets - either hold a packet back, or if one held back then send both
         if random.random() < self.prob_pkt_reorder or self.reorder_msg_S:
             if self.reorder_msg_S is None:
                 self.reorder_msg_S = msg_S
+                print("Packet reordering simulated.")
                 return None
             else:
-                msg_S += self.reorder_msg_S
+                msg_S = self.reorder_msg_S + msg_S
                 self.reorder_msg_S = None
+                print("Packet reordering simulated.")
 
         # keep calling send until all the bytes are transferred
         totalsent = 0
