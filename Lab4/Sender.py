@@ -27,27 +27,29 @@ if __name__ == "__main__":
     time_of_last_data = time.time()
 
     swrdt = SWRDT.SWRDT("sender", args.receiver, args.port)
-    for msg_S in msg_L:
+    for i, msg_S in enumerate(msg_L):
         print("Sent Message: " + msg_S)
         swrdt.swrdt_send(msg_S)
 
-        # try to receive message before timeout
-        received_msg = None
-        while received_msg is None:
-            received_msg = swrdt.swrdt_receive()
-            if received_msg is None:
-                if time_of_last_data + timeout < time.time():
-                    print(f"Timeout! Resend message {swrdt.seq_num}")
-                    swrdt.swrdt_send(msg_S)
-                    time_of_last_data = time.time()
-                else:
-                    continue
-        time_of_last_data = time.time()
+        # Wait for ACK
+        ack_received = False
+        while not ack_received:
+            ack = swrdt.network.network_receive()
+            if ack:
+                try:
+                    ack_segment = SWRDT.Segment.from_byte_S(ack)
+                    if ack_segment.msg_S == "ACK" and ack_segment.seq_num == swrdt.seq_num - 1:
+                        print(f"Receive ACK {ack_segment.seq_num}. Proceed to next message.")
+                        ack_received = True
+                except RuntimeError:
+                    print(f"Corruption detected in ACK. Resend message {swrdt.seq_num - 1}")
+            if time_of_last_data + timeout < time.time():
+                print(f"Timeout! Resend message {swrdt.seq_num - 1}")
+                swrdt.swrdt_send(msg_S)
+                time_of_last_data = time.time()
 
-        # print the result
-        if received_msg:
-            print("Received Message: " + received_msg + "\n")
-        else:
-            print("No reply received for: " + msg_S + "\n")
+        # Stop after the last message
+        if i == len(msg_L) - 1:
+            break
 
     swrdt.disconnect()

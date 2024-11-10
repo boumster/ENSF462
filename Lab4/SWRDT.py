@@ -2,6 +2,7 @@ import Network
 import argparse
 from time import sleep
 import hashlib
+import time
 
 
 class Segment:
@@ -87,23 +88,28 @@ class SWRDT:
     def swrdt_send(self, msg_S):
         ack_received = False
         while not ack_received:
-            p = Segment(self.seq_num, msg_S)
+            p = Segment(self.seq_num, f"{self.seq_num}:{msg_S}")
             self.network.network_send(p.get_byte_S())
             print(f"Send message {self.seq_num}")
-            # Wait for ACK
-            ack = self.network.network_receive()
-            if ack:
-                try:
-                    ack_segment = Segment.from_byte_S(ack)
-                    if ack_segment.msg_S == "ACK" and ack_segment.seq_num == self.seq_num:
-                        print(f"Receive ACK {ack_segment.seq_num}. Message successfully sent!")
-                        ack_received = True
-                        self.seq_num += 1
-                    else:
-                        print(f"Receive ACK {ack_segment.seq_num}. Resend message {self.seq_num}")
-                except RuntimeError:
-                    print(f"Corruption detected in ACK. Resend message {self.seq_num}")
-
+            start_time = time.time()
+            while True:
+                ack = self.network.network_receive()
+                if ack:
+                    try:
+                        ack_segment = Segment.from_byte_S(ack)
+                        print(f"Parsed ACK: seq_num={ack_segment.seq_num}, msg_S={ack_segment.msg_S}")  # Debug print
+                        if ack_segment.msg_S == "ACK" and ack_segment.seq_num == self.seq_num:
+                            print(f"Receive ACK {ack_segment.seq_num}. Message successfully sent!")
+                            ack_received = True
+                            self.seq_num += 1
+                            break
+                        else:
+                            print(f"Receive ACK {ack_segment.seq_num}. Resend message {self.seq_num}")
+                    except RuntimeError:
+                        print(f"Corruption detected in ACK. Resend message {self.seq_num}")
+                if time.time() - start_time > 2:  # timeout after 2 seconds
+                    print(f"Timeout! Resend message {self.seq_num}")
+                    break
 
     def swrdt_receive(self):
         ret_S = None
@@ -133,6 +139,7 @@ class SWRDT:
                     ack_segment = Segment(p.seq_num, "ACK")
                     self.network.network_send(ack_segment.get_byte_S())
                     self.expected_seq_num += 1
+                    print(f"Received message content: {p.msg_S}")  # Debug print
                     ret_S = p.msg_S if (ret_S is None) else ret_S + p.msg_S
                     return ret_S
                 else:
