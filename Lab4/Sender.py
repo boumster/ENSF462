@@ -27,9 +27,8 @@ if __name__ == "__main__":
     time_of_last_data = time.time()
 
     swrdt = SWRDT.SWRDT("sender", args.receiver, args.port)
-    for i, msg_S in enumerate(msg_L):
+    for msg_S in msg_L:
         print("Sent Message: " + msg_S)
         swrdt.swrdt_send(msg_S)
-        time_of_last_data = time.time()
 
     swrdt.disconnect()
