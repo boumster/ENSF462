@@ -2,6 +2,7 @@ import Network
 import argparse
 from time import sleep
 import hashlib
+import time
 
 
 class Segment:
@@ -52,18 +53,14 @@ class Segment:
         # extract the fields
         length_S = byte_S[0 : Segment.length_S_length]
         seq_num_S = byte_S[
-            Segment.length_S_length : Segment.seq_num_S_length + Segment.seq_num_S_length
+            Segment.length_S_length : Segment.length_S_length + Segment.seq_num_S_length
         ]
         checksum_S = byte_S[
-            Segment.seq_num_S_length
-            + Segment.seq_num_S_length : Segment.seq_num_S_length
-            + Segment.length_S_length
-            + Segment.checksum_length
+            Segment.length_S_length + Segment.seq_num_S_length : Segment.length_S_length + Segment.seq_num_S_length + Segment.checksum_length
         ]
         msg_S = byte_S[
-            Segment.seq_num_S_length + Segment.seq_num_S_length + Segment.checksum_length :
+            Segment.length_S_length + Segment.seq_num_S_length + Segment.checksum_length :
         ]
-
         # compute the checksum locally
         checksum = hashlib.md5(str(length_S + seq_num_S + msg_S).encode("utf-8"))
         computed_checksum_S = checksum.hexdigest()
@@ -74,6 +71,7 @@ class Segment:
 class SWRDT:
     ## latest sequence number used in a segment
     seq_num = 1
+    expected_seq_num = 1
     ## buffer of bytes read from network
     byte_buffer = ""
 
@@ -84,30 +82,65 @@ class SWRDT:
         self.network.disconnect()
 
     def swrdt_send(self, msg_S):
-        p = Segment(self.seq_num, msg_S)
-        self.seq_num += 1
-        self.network.network_send(p.get_byte_S())
+        ack_received = False
+        while not ack_received:
+            p = Segment(self.seq_num, f"{self.seq_num}:{msg_S}")
+            self.network.network_send(p.get_byte_S())
+            print(f"Send message {self.seq_num}")
+            start_time = time.time()
+            while True:
+                ack = self.network.network_receive()
+                if ack:
+                    try:
+                        ack_segment = Segment.from_byte_S(ack)
+                        if ack_segment.msg_S == "ACK" and ack_segment.seq_num == self.seq_num:
+                            print(f"Receive ACK {ack_segment.seq_num}. Message successfully sent!")
+                            ack_received = True
+                            self.seq_num += 1
+                            break
+                        else:
+                            print(f"Receive ACK {ack_segment.seq_num}. Resend message {self.seq_num}")
+                    except RuntimeError:
+                        print(f"Corruption detected in ACK. Resend message {self.seq_num}")
+                if time.time() - start_time > 2:  # timeout after 2 seconds
+                    print(f"Timeout! Resend message {self.seq_num}")
+                    break
 
     def swrdt_receive(self):
         ret_S = None
-        byte_S = self.network.network_receive()
-        self.byte_buffer += byte_S
-        # keep extracting segments
         while True:
-            # check if we have received enough bytes
-            if len(self.byte_buffer) < Segment.length_S_length:
-                return ret_S  # not enough bytes to read segment length
-            # extract length of segment
-            length = int(self.byte_buffer[: Segment.length_S_length])
-            if len(self.byte_buffer) < length:
-                return ret_S  # not enough bytes to read the whole Segment
-            # create Segment from buffer content and add to return string
-            p = Segment.from_byte_S(self.byte_buffer[0:length])
-            ret_S = p.msg_S if (ret_S is None) else ret_S + p.msg_S
-            # remove the Segment bytes from the buffer
-            self.byte_buffer = self.byte_buffer[length:]
-            # if this was the last Segment, will return on the next iteration
-
+            byte_S = self.network.network_receive()
+            self.byte_buffer += byte_S
+            # keep extracting segments
+            while True:
+                # check if we have received enough bytes
+                if len(self.byte_buffer) < Segment.length_S_length:
+                    break  # not enough bytes to read segment length
+                # extract length of segment
+                length = int(self.byte_buffer[: Segment.length_S_length])
+                if len(self.byte_buffer) < length:
+                    break  # not enough bytes to read the whole Segment
+                # create Segment from buffer content
+                segment = self.byte_buffer[0:length]
+                self.byte_buffer = self.byte_buffer[length:]
+                if Segment.corrupt(segment):
+                    print(f"Corruption detected! Send ACK {self.expected_seq_num - 1}")
+                    ack_segment = Segment(self.expected_seq_num - 1, "ACK")
+                    self.network.network_send(ack_segment.get_byte_S())
+                    continue  # If the segment is corrupt, discard it
+                p = Segment.from_byte_S(segment)
+                if p.seq_num == self.expected_seq_num:
+                    print(f"Receive message {p.seq_num}. Send ACK {p.seq_num}")
+                    ack_segment = Segment(p.seq_num, "ACK")
+                    self.network.network_send(ack_segment.get_byte_S())
+                    self.expected_seq_num += 1
+                    print(f"Received message content: {p.msg_S}")  # Debug print
+                    ret_S = p.msg_S if (ret_S is None) else ret_S + p.msg_S
+                    return ret_S
+                else:
+                    print(f"Receive message {p.seq_num}. Send ACK {self.expected_seq_num - 1}")
+                    ack_segment = Segment(self.expected_seq_num - 1, "ACK")
+                    self.network.network_send(ack_segment.get_byte_S())
 
 
 if __name__ == "__main__":

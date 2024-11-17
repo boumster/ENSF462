@@ -27,23 +27,9 @@ if __name__ == "__main__":
     time_of_last_data = time.time()
 
     swrdt = SWRDT.SWRDT("sender", args.receiver, args.port)
-    for msg_S in msg_L:
+    for i, msg_S in enumerate(msg_L):
         print("Sent Message: " + msg_S)
         swrdt.swrdt_send(msg_S)
-
-        # try to receive message before timeout
-        msg_S = None
-        while msg_S == None:
-            msg_S = swrdt.swrdt_receive()
-            if msg_S is None:
-                if time_of_last_data + timeout < time.time():
-                    break
-                else:
-                    continue
         time_of_last_data = time.time()
-
-        # print the result
-        if msg_S:
-            print("Received Message: " + msg_S + "\n")
 
     swrdt.disconnect()
